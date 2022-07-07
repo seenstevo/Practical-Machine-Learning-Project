@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
 ```
 
 ## Introduction
@@ -72,7 +72,7 @@ model_rf
 stopCluster(cluster)
 registerDoSEQ()
 ```
-We see that the accuracy is very high without needing to modify any further variables or parameter settings. Very different mtry values all yield high accuracy.
+We see that the accuracy is very high without needing to modify any further variables or parameter settings. Very different mtry values all yield high accuracy. The *estimated out of sample error* is 0.0082889 based on the best accuracy with the mtry = 17. This is derived from the average of the 5 fold CV. 
 
 With our model built, we need to process the testing data in the same way and predict the classe of dumbell activity using the model. 
 ```{r}
@@ -84,13 +84,13 @@ testing <- predict(preproc, testing)
 test_predict <- predict(model_rf, newdata = testing)
 confusionMatrix(test_predict, testing$classe)
 ```
-Our confusion matrix again shows that the model has very high accuracy for this dataset/sample. The *out of sample error* will always be higher and this is likely to be the case here as the dataset is based on few individuals. With new individuals and a new data collection, the differences between people will introduce a lot more noise that the model has not been trained on or seen and so the *out of sample error* will increase.
+Our confusion matrix again shows that the model has very high accuracy for this dataset/sample. 
 
 Finally we can show the final test or validation data set of 20 cases to see what "classe" is predicted. This gets all 20 cases correct.
 ```{r}
 test <- test[,!variance$nzv]
-test <- select(test, variables.not.missing[1:46])
-test <- select(test, 8:46)
+test <- select(test, variables.not.missing[1:44])
+test <- select(test, 8:44)
 test <- select(test, !fC)
 test <- predict(preproc, test)
 test_predict_final <- predict(model_rf, newdata = test)
