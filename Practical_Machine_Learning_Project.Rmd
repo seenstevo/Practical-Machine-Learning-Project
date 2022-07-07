@@ -1,0 +1,98 @@
+---
+title: "Practical Machine Learning Project"
+author: "SR Stevenson"
+date: '2022-07-06'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This project will use the Weight Lifting Exercise Dataset to build a model that predicts the type of barbell lift being performed. 
+The training dataset will be split into training and testing while the testing dataset of 20 cases will be used for validation. 
+
+## Loading libraries and data
+
+```{r echo = FALSE}
+library(caret)
+library(tidyverse)
+library(readr)
+library(reshape2)
+library(ggplot2)
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+train_original <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+## The Model
+
+First we split the training portion into a training and testing set leaving the test for validation and evaluation
+
+```{r}
+inTraining <- createDataPartition(train_original$classe, p = .75, list=FALSE)
+training <- train_original[inTraining,]
+testing <- train_original[-inTraining,]
+dim(training)
+```
+
+Then we do cleaning up of the variables removing those that are not informative for our model. This includes removing variables with near zero variance, then variables with majority missing or NA values, we remove all variables up to "roll_belt" given that they would be unlikely to help the model with out of sample predictions and then remove highly correlated variables.   
+```{r}
+numeric_cols <- sapply(training, is.numeric)
+variance <- nearZeroVar(training[numeric_cols], saveMetrics = T)
+training <- training[,!variance$nzv]
+dim(training)
+na_count <- sapply(training, function(y) sum(length(which(is.na(y)))))
+missing_count <- sapply(training, function(y) sum(length(which(y == ""))))
+na_miss <- data.frame(na = na_count, missing = missing_count)
+variables.not.missing <- row.names(filter(na_miss, !(na > 10000 | missing > 10000)))
+training <- select(training, variables.not.missing)
+dim(training)
+training <- select(training, "roll_belt":"classe")
+dim(training)
+train_cor = cor(training[,-length(names(training))])
+fC <- findCorrelation(train_cor, verbose = T, names = T, cutoff = 0.8)
+training <- select(training, !fC)
+```
+Now we have all the variables we want to use and so we begin preprocessing. With no missing values, we only need to standardise the values. 
+```{r}
+preproc <- preProcess(training, method = "scale")
+training <- predict(preproc, training)
+```
+Now we build our model using traincontrol to set up the *cross validation* with size 5 and allowing parallel processing to speed up the random forest. A random forest is chosen as they often perform well and allow the identification of important variables is further feature selection is required to boost performance. 
+```{r}
+fitControl <- trainControl(method = "cv", number = 5, allowParallel = TRUE)
+model_rf <- train(classe ~ ., data = training, method = "rf", trControl = fitControl)
+model_rf
+stopCluster(cluster)
+registerDoSEQ()
+```
+We see that the accuracy is very high without needing to modify any further variables or parameter settings. Very different mtry values all yield high accuracy.
+
+With our model built, we need to process the testing data in the same way and predict the classe of dumbell activity using the model. 
+```{r}
+testing <- testing[,!variance$nzv]
+testing <- select(testing, variables.not.missing)
+testing <- select(testing, "roll_belt":"classe")
+testing <- select(testing, !fC)
+testing <- predict(preproc, testing)
+test_predict <- predict(model_rf, newdata = testing)
+confusionMatrix(test_predict, testing$classe)
+```
+Our confusion matrix again shows that the model has very high accuracy for this dataset/sample. The *out of sample error* will always be higher and this is likely to be the case here as the dataset is based on few individuals. With new individuals and a new data collection, the differences between people will introduce a lot more noise that the model has not been trained on or seen and so the *out of sample error* will increase.
+
+Finally we can show the final test or validation data set of 20 cases to see what "classe" is predicted. This gets all 20 cases correct.
+```{r}
+test <- test[,!variance$nzv]
+test <- select(test, variables.not.missing[1:46])
+test <- select(test, 8:46)
+test <- select(test, !fC)
+test <- predict(preproc, test)
+test_predict_final <- predict(model_rf, newdata = test)
+test_predict_final
+```
